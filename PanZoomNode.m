@@ -55,9 +55,29 @@
 
 
 - (void) setNode:(CCNode *)node {
+    // any old node?
+    if ( _node ) {
+        [_node removeFromParentAndCleanup:YES];
+        _node = nil;
+    }
+
     _node = node;
     _node.anchorPoint = ccp(0,0);
-    [self addChild:_node];
+
+    if ( _node ) {
+        [self addChild:_node];
+
+        // enable the recognizers
+        self.panRecognizer.enabled = YES;
+        self.pinchRecognizer.enabled = YES;
+        self.tapRecognizer.enabled = YES;
+    }
+    else {
+        // no node, so nothing to pan/pinch etc either
+        self.panRecognizer.enabled = NO;
+        self.pinchRecognizer.enabled = NO;
+        self.tapRecognizer.enabled = NO;
+    }
 }
 
 
@@ -137,6 +157,9 @@
 
     // add the scrolling offset
     pos = ccpAdd( pos, ccpNeg(self.scrollOffset) );
+
+    // and scale based on the node scale
+    pos = ccpMult( pos, 1 / self.node.scale );
     
     if ( self.delegate ) {
         [self.delegate node:self.node tappedAt:pos];
@@ -166,7 +189,7 @@
     self.velocity = ccpMult( self.velocity, self.friction );
 
     // when the speed is slow enough we stop
-    if ( self.velocity.x < 1 && self.velocity.y < 1 ) {
+    if ( self.velocity.x < 1 || self.velocity.y < 1 ) {
         // stop panning
         [self unscheduleUpdate];
         return;
