@@ -101,6 +101,9 @@
         self.scrollOffset = ccp( x, y );
         self.node.position = self.scrollOffset;
     }
+
+    // stop all panning immediately
+    [self unscheduleUpdate];
 }
 
 
@@ -117,9 +120,11 @@
     
     self.lastPanPosition = pos;
 
+    // if the panning ended now then continue panning through inertia for a while
     if ( recognizer.state == UIGestureRecognizerStateEnded ) {
         self.velocity = [[CCDirector sharedDirector] convertToGL:[recognizer velocityInView:[[CCDirector sharedDirector] view]]];
-        CCLOG( @"inertia: %.1f, %.1f", self.velocity.x, self.velocity.y );
+
+        // unschedule any previous update() and reschedule a new
         [self unscheduleUpdate];
         [self scheduleUpdate];
     }
@@ -136,6 +141,9 @@
     if ( self.delegate ) {
         [self.delegate node:self.node tappedAt:pos];
     }
+
+    // stop all panning immediately
+    [self unscheduleUpdate];
 }
 
 
@@ -154,12 +162,10 @@
 
 
 - (void) update:(ccTime)delta {
-    CCLOG( @"start: %.1f, %.1f", self.velocity.x, self.velocity.y );
-
     // scale the speed with friction
     self.velocity = ccpMult( self.velocity, self.friction );
-    CCLOG( @"scaled: %.1f, %.1f", self.velocity.x, self.velocity.y );
 
+    // when the speed is slow enough we stop
     if ( self.velocity.x < 1 && self.velocity.y < 1 ) {
         // stop panning
         [self unscheduleUpdate];
@@ -170,7 +176,16 @@
     float x = self.scrollOffset.x + self.velocity.x * delta;
     float y = self.scrollOffset.y + self.velocity.y * delta;
 
+    CGPoint lastScrollOffset = self.scrollOffset;
+
+    // perform the panning
     [self panTo:x y:y];
+
+    // did we actually scroll anywhere?
+    if ( ccpDistance( lastScrollOffset, self.scrollOffset ) < 1.0f ) {
+        // nope, no need to update anymore
+        [self unscheduleUpdate];
+    }
 }
 
 
@@ -187,112 +202,5 @@
     
     return YES;
 }
-
-/*
-#pragma mark - Touch One By One Delegate
-
-- (BOOL)ccTouchBegan:(UITouch *)touch withEvent:(UIEvent *)event {
-    return NO;
-    
-    for ( UITouch * tmpTouch in event.allTouches ) {
-        if ( self.firstTouch == nil ) {
-            self.firstTouch = tmpTouch;
-            self.firstPos = [[CCDirector sharedDirector] convertToGL:[tmpTouch locationInView:[tmpTouch view]]];
-            self.firstTime = [NSDate timeIntervalSinceReferenceDate];
-
-        }
-        else if ( self.secondTouch == nil ) {
-            self.secondTouch = tmpTouch;
-            self.secondPos = [[CCDirector sharedDirector] convertToGL:[tmpTouch locationInView:[tmpTouch view]]];
-            self.secondTime = [NSDate timeIntervalSinceReferenceDate];
-        }
-    }
-
-    CCLOG(@"touch count: %d", event.allTouches.count );
-    return YES;
-}
-
-- (void)ccTouchMoved:(UITouch *)touch withEvent:(UIEvent *)event {
-    if ( self.firstTouch && self.secondTouch ) {
-        // pinching
-        CGPoint firstCurrent   = [[CCDirector sharedDirector] convertToGL:[self.firstTouch locationInView:[self.firstTouch view]]];
-        CGPoint firstPrevious  = [[CCDirector sharedDirector] convertToGL:[self.firstTouch previousLocationInView:[self.firstTouch view]]];
-        CGPoint secondCurrent  = [[CCDirector sharedDirector] convertToGL:[self.secondTouch locationInView:[self.secondTouch view]]];
-        CGPoint secondPrevious = [[CCDirector sharedDirector] convertToGL:[self.secondTouch previousLocationInView:[self.secondTouch view]]];
-
-        // starting distance
-        float startDistance = ccpDistance( self.firstPos, self.secondPos );
-        float currentDistance = ccpDistance( firstCurrent, secondCurrent );
-        float previousDistance = ccpDistance( firstPrevious, secondPrevious );
-        float scale = self.node.scale * currentDistance / previousDistance;
-
-        // keep the scale inside the min and max values
-        scale = clampf( scale, self.minScale, self.maxScale );
-        self.node.scale = scale;
-
-        CCLOG( @"pinching: previous: %.1f, current: %.1f, scale: %.1f", previousDistance, currentDistance, scale );
-    }
-    else if ( self.firstTouch ) {
-        // panning. first see how much we've panned since the last time this was called
-        CGPoint current = [[CCDirector sharedDirector] convertToGL:[touch locationInView:[self.firstTouch view]]];
-        CGPoint previous = [[CCDirector sharedDirector] convertToGL:[touch previousLocationInView:[self.firstTouch view]]];
-        CGPoint delta = ccpSub(current, previous );
-
-        float x = self.scrollOffset.x + delta.x;
-        float y = self.scrollOffset.y + delta.y;
-
-        // keep the scrolling offset within limits
-        x = MIN( MAX( self.boundingBox.size.width - self.node.boundingBox.size.width, x ), 0 );
-        y = MIN( MAX( self.boundingBox.size.height - self.node.boundingBox.size.height, y ), 0 );
-
-        // position the node
-        self.scrollOffset = ccp( x, y );
-        self.node.position = self.scrollOffset;
-
-        CCLOG(@"panning: current %.1f, %.1f, previous %.1f, %.1f, delta: %.1f %.1f", current.x, current.y, previous.x, previous.y, delta.x, delta.y);
-    }
-    else {
-        // wtf?
-        NSAssert( NO, @"no touches?");
-    }
-}
-
-
-- (void)ccTouchEnded:(UITouch *)touch withEvent:(UIEvent *)event {
-    CCLOG(@"touch count: %d", event.allTouches.count );
-
-    for ( UITouch * tmpTouch in event.allTouches ) {
-
-        if ( tmpTouch == self.secondTouch ) {
-            self.secondTouch = nil;
-        }
-        else if ( tmpTouch == self.firstTouch ) {
-            // could it have been a click?
-            if ( self.secondTouch == nil ) {
-                // how long since touch started?
-                NSTimeInterval touchLength = [NSDate timeIntervalSinceReferenceDate] - self.firstTime;
-
-                // how far from the start pos?
-                float distance = ccpDistance( self.firstPos, [[CCDirector sharedDirector] convertToGL:[tmpTouch locationInView:[self.firstTouch view]]] );
-
-                CCLOG( @"touch time: %.2f, length: %.0f", touchLength, distance );
-                if ( distance  < 20.0f && touchLength < 0.2f ) {
-                    CCLOG( @"tap!" );
-                }
-            }
-
-            self.firstTouch = self.secondTouch;
-            self.secondTouch = nil;
-        }
-    }
-}
-
-
-- (void)ccTouchCancelled:(UITouch *)touch withEvent:(UIEvent *)event {
-    CCLOG(@"in");
-    self.firstTouch = nil;
-    self.secondTouch = nil;
-}
-*/
 
 @end
