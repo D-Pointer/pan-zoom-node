@@ -42,6 +42,7 @@
         // tap recognizer
         self.tapRecognizer = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleTap:)];
         self.tapRecognizer.delegate = self;
+        self.tapRecognizer.cancelsTouchesInView = NO;
         [[[CCDirector sharedDirector] view] addGestureRecognizer:self.tapRecognizer];
         
         // pan recognizer
@@ -142,8 +143,12 @@
 
     // if the panning ended now then continue panning through inertia for a while
     if ( recognizer.state == UIGestureRecognizerStateEnded ) {
-        self.velocity = [[CCDirector sharedDirector] convertToGL:[recognizer velocityInView:[[CCDirector sharedDirector] view]]];
+        //self.velocity = [[CCDirector sharedDirector] convertToGL:[recognizer velocityInView:[[CCDirector sharedDirector] view]]];
+        self.velocity = [recognizer velocityInView:[[CCDirector sharedDirector] view]];
 
+        // negate the y component, otherwise we move in the wrong direction
+        self.velocity = ccp( self.velocity.x, -self.velocity.y );
+        
         // unschedule any previous update() and reschedule a new
         [self unscheduleUpdate];
         [self scheduleUpdate];
@@ -161,7 +166,7 @@
     // and scale based on the node scale
     pos = ccpMult( pos, 1 / self.node.scale );
     
-    if ( self.delegate ) {
+    if ( self.delegate && [self.delegate respondsToSelector:@selector(node:tappedAt:)]) {
         [self.delegate node:self.node tappedAt:pos];
     }
 
@@ -189,7 +194,7 @@
     self.velocity = ccpMult( self.velocity, self.friction );
 
     // when the speed is slow enough we stop
-    if ( self.velocity.x < 1 || self.velocity.y < 1 ) {
+    if ( fabsf( self.velocity.x ) < 1 || fabsf( self.velocity.y ) < 1 ) {
         // stop panning
         [self unscheduleUpdate];
         return;
