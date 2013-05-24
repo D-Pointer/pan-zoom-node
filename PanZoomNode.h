@@ -1,5 +1,5 @@
 
-#import "CCNode.h"
+#import "cocos2d.h"
 
 /**
  * Delegate for the PanZoomNode. Contains optional methods that can be implemented in order
@@ -21,7 +21,7 @@
  * this node initialize it and set the node property to a CCNode that should
  * be pannable and zoomable.
  **/
-@interface PanZoomNode : CCNode <UIGestureRecognizerDelegate>
+@interface PanZoomNode : CCNode <CCTargetedTouchDelegate>
 
 // the node that is panned and zoomed
 @property (nonatomic, strong) CCNode * node;
@@ -35,6 +35,12 @@
 // friction value for the kinetic scrolling after panning. Applied to the scrolling velocity each tick to reduce the panning
 // speed. Sane values are 0 <= friction < 1.0. Default: 0.8
 @property (nonatomic, assign) float friction;
+
+// maximum distance a touch can move for it to still be considered a tap. Default: 20 px
+@property (nonatomic, assign) float maxTapDistance;
+
+// maximum duration for a touch to still be considered a tap. Default 0.2s
+@property (nonatomic, assign) NSTimeInterval maxTapTime;
 
 // optional delegate
 @property (nonatomic, assign) id<PanZoomNodeDelegate> delegate;
