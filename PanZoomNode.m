@@ -13,13 +13,14 @@
 
 @property (nonatomic, assign) float          startPinchDistance;
 
-@property (nonatomic, assign) float                      lastScale;
-@property (nonatomic, assign) CGPoint                    scrollOffset;
+@property (nonatomic, assign) float          lastScale;
+@property (nonatomic, assign) CGPoint        scrollOffset;
 
 // inertia speed in points per second for when a panning ends
-@property (nonatomic, assign) CGPoint                    velocity;
+@property (nonatomic, assign) CGPoint        velocity;
 
 @end
+
 
 @implementation PanZoomNode
 
@@ -90,6 +91,65 @@
 
     // peform the panning
     [self panTo:scrollX y:scrollY];
+}
+
+- (void) resetTouches {
+    CCLOG( @"in" );
+    self.touch1 = nil;
+    self.touch2 = nil;
+    self.timestamp = 0;
+}
+
+
+- (void) panTo:(float)x y:(float)y {
+    float nodeWidth = self.node.boundingBox.size.width;
+    float nodeHeight = self.node.boundingBox.size.height;
+
+    // keep the scrolling offset within limits
+    x = MIN( MAX( self.boundingBox.size.width - nodeWidth, x ), 0 );
+    y = MIN( MAX( self.boundingBox.size.height - nodeHeight, y ), 0 );
+
+    // position the node
+    self.scrollOffset = ccp( x, y );
+    self.node.position = self.scrollOffset;
+}
+
+
+- (void) update:(ccTime)delta {
+    // scale the speed with friction
+    self.velocity = ccpMult( self.velocity, self.friction );
+
+    CCLOG( @"velocity: %.0f, %.0f, friction: %.2f", self.velocity.x, self.velocity.y, self.friction );
+
+    // when the speed is slow enough we stop
+    if ( fabsf( self.velocity.x ) < 1 && fabsf( self.velocity.y ) < 1 ) {
+        // stop panning
+        CCLOG( @"velocity done" );
+        [self unscheduleUpdate];
+        return;
+    }
+
+    // where should we pan
+    float x = self.scrollOffset.x + self.velocity.x * delta;
+    float y = self.scrollOffset.y + self.velocity.y * delta;
+
+    CGPoint lastScrollOffset = self.scrollOffset;
+
+    // perform the panning
+    [self panTo:x y:y];
+
+    // did we actually scroll anywhere?
+    float scrolledX = fabsf( lastScrollOffset.x - self.scrollOffset.x );
+    float scrolledY = fabsf( lastScrollOffset.y - self.scrollOffset.y );
+    CCLOG( @"scrolled: %.2f, %.2f", scrolledX, scrolledY );
+
+    //float scrollDistance = ccpDistance( lastScrollOffset, self.scrollOffset );
+    //if ( scrollDistance < 1.0f ) {
+    if ( scrolledX < 0.2f && scrolledY < 0.2f ) {
+        // nope, no need to update anymore
+        CCLOG( @"no scrolling" );
+        [self unscheduleUpdate];
+    }
 }
 
 
@@ -241,176 +301,4 @@
 }
 
 
-- (void) resetTouches {
-    CCLOG( @"in" );
-    self.touch1 = nil;
-    self.touch2 = nil;
-    self.timestamp = 0;
-}
-
-
-- (void) panTo:(float)x y:(float)y {
-    float nodeWidth = self.node.boundingBox.size.width;
-    float nodeHeight = self.node.boundingBox.size.height;
-
-    // keep the scrolling offset within limits
-    x = MIN( MAX( self.boundingBox.size.width - nodeWidth, x ), 0 );
-    y = MIN( MAX( self.boundingBox.size.height - nodeHeight, y ), 0 );
-
-    // position the node
-    self.scrollOffset = ccp( x, y );
-    self.node.position = self.scrollOffset;
-}
-
-
-- (void) update:(ccTime)delta {
-    // scale the speed with friction
-    self.velocity = ccpMult( self.velocity, self.friction );
-
-    CCLOG( @"velocity: %.0f, %.0f, friction: %.2f", self.velocity.x, self.velocity.y, self.friction );
-
-    // when the speed is slow enough we stop
-    if ( fabsf( self.velocity.x ) < 1 && fabsf( self.velocity.y ) < 1 ) {
-        // stop panning
-        CCLOG( @"velocity done" );
-        [self unscheduleUpdate];
-        return;
-    }
-
-    // where should we pan
-    float x = self.scrollOffset.x + self.velocity.x * delta;
-    float y = self.scrollOffset.y + self.velocity.y * delta;
-
-    CGPoint lastScrollOffset = self.scrollOffset;
-
-    // perform the panning
-    [self panTo:x y:y];
-
-    // did we actually scroll anywhere?
-    float scrolledX = fabsf( lastScrollOffset.x - self.scrollOffset.x );
-    float scrolledY = fabsf( lastScrollOffset.y - self.scrollOffset.y );
-    CCLOG( @"scrolled: %.2f, %.2f", scrolledX, scrolledY );
-
-    //float scrollDistance = ccpDistance( lastScrollOffset, self.scrollOffset );
-    //if ( scrollDistance < 1.0f ) {
-    if ( scrolledX < 0.2f && scrolledY < 0.2f ) {
-        // nope, no need to update anymore
-        CCLOG( @"no scrolling" );
-        [self unscheduleUpdate];
-    }
-}
-
-
-/*
- - (void) handlePinch:(UIPinchGestureRecognizer *)recognizer {
- if ( recognizer.state == UIGestureRecognizerStateBegan || recognizer.state == UIGestureRecognizerStateEnded ) {
- self.lastScale = 1.0f;
- }
- else {
- // basic scaling
- CGFloat scale = 1.0f - (self.lastScale - recognizer.scale);
- scale = self.node.scale * scale;
-
- // keep the scale inside the min and max values
- self.node.scale = clampf( scale, self.minScale, self.maxScale );
- self.lastScale = recognizer.scale;
-
- float nodeWidth = self.node.boundingBox.size.width;
- float nodeHeight = self.node.boundingBox.size.height;
-
- // keep the scrolling offset within limits
- float x = MIN( MAX( self.boundingBox.size.width - nodeWidth, self.scrollOffset.x ), 0 );
- float y = MIN( MAX( self.boundingBox.size.height - nodeHeight, self.scrollOffset.y ), 0 );
-
- // position the node
- self.scrollOffset = ccp( x, y );
- self.node.position = self.scrollOffset;
- }
-
- // stop all panning immediately
- [self unscheduleUpdate];
- }
-
- - (void) handlePan:(UIPanGestureRecognizer *)recognizer {
- CGPoint pos = [[CCDirector sharedDirector] convertToGL:[recognizer locationInView:[[CCDirector sharedDirector] view]]];
-
- // did we start a panning now?
- CGPoint delta = ccpSub( pos, self.lastPanPosition );
-
- float x = self.scrollOffset.x + delta.x;
- float y = self.scrollOffset.y + delta.y;
-
- [self panTo:x y:y];
-
- self.lastPanPosition = pos;
-
- // if the panning ended now then continue panning through inertia for a while
- if ( recognizer.state == UIGestureRecognizerStateEnded ) {
- //self.velocity = [[CCDirector sharedDirector] convertToGL:[recognizer velocityInView:[[CCDirector sharedDirector] view]]];
- self.velocity = [recognizer velocityInView:[[CCDirector sharedDirector] view]];
-
- // negate the y component, otherwise we move in the wrong direction
- self.velocity = ccp( self.velocity.x, -self.velocity.y );
-
- // unschedule any previous update() and reschedule a new
- [self unscheduleUpdate];
- [self scheduleUpdate];
- }
-
- }
-
-
- - (void) handleTap:(UITapGestureRecognizer *)recognizer {
- CCLOG( @"in" );
- CGPoint pos = [[CCDirector sharedDirector] convertToGL:[recognizer locationInView:[[CCDirector sharedDirector] view]]];
-
- // add the scrolling offset
- pos = ccpAdd( pos, ccpNeg(self.scrollOffset) );
-
- // and scale based on the node scale
- pos = ccpMult( pos, 1 / self.node.scale );
-
- if ( self.delegate && [self.delegate respondsToSelector:@selector(node:tappedAt:)]) {
- [self.delegate node:self.node tappedAt:pos];
- }
-
- // stop all panning immediately
- [self unscheduleUpdate];
- }
- */
-
-#pragma mark - Gesture Recognizer Delegate
-/*
-- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldReceiveTouch:(UITouch *)touch {
-    CGPoint pos = [[CCDirector sharedDirector] convertToGL:[self.panRecognizer locationInView:gestureRecognizer.view]];
-
-    // start looking up
-    CCLOG( @"start check for pos: %.1f, %.1f", pos.x, pos.y );
-
-    CCNode * rootNode = self;
-
-    while ( rootNode.parent != nil ) {
-        rootNode = rootNode.parent;
-    }
-
-
-    // start looking up
-    CCLOG( @"root node: %@, touches: %d", rootNode, [rootNode respondsToSelector:@selector(ccTouchBegan:withEvent:)] );
-
-    return NO;
-}
-
-
-- (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)gestureRecognizer {
-    // set up some start values of the recohnizer is starting
-    if ( gestureRecognizer == self.panRecognizer ) {
-        self.lastPanPosition = [[CCDirector sharedDirector] convertToGL:[self.panRecognizer locationInView:gestureRecognizer.view]];
-    }
-    else if ( gestureRecognizer == self.pinchRecognizer ) {
-        self.lastScale = 1.0f;
-    }
-    
-    return YES;
-}
-*/
 @end
