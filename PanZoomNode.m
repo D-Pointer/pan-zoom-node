@@ -32,7 +32,8 @@
         // no scrolling offset yet
         self.scrollOffset = ccp( 0, 0 );
 
-        self.contentSize = CGSizeMake( 1024, 768 );
+        // assume we cover the entire screen
+        self.contentSize = [[CCDirector sharedDirector] winSize];
         
         // sane default scales
         self.minScale = 1.0f;
@@ -42,6 +43,7 @@
         // max time and distance for a tap to be a tap and not a pan
         self.maxTapDistance = 20;
         self.maxTapTime = 0.2;
+        self.maxLongPressime = 1.0;
         
         [self resetTouches];
     }
@@ -79,6 +81,8 @@
 
 
 - (void) centerOn:(CGPoint)pos {
+    NSAssert( self.node, @"no node set" );
+
     // first convert the point to match the node's scale
     CGPoint scaledPos = ccpMult( pos, self.node.scale );
 
@@ -102,6 +106,8 @@
 
 
 - (void) panTo:(float)x y:(float)y {
+    NSAssert( self.node, @"no node set" );
+
     float nodeWidth = self.node.boundingBox.size.width;
     float nodeHeight = self.node.boundingBox.size.height;
 
@@ -143,8 +149,6 @@
     float scrolledY = fabsf( lastScrollOffset.y - self.scrollOffset.y );
     CCLOG( @"scrolled: %.2f, %.2f", scrolledX, scrolledY );
 
-    //float scrollDistance = ccpDistance( lastScrollOffset, self.scrollOffset );
-    //if ( scrollDistance < 1.0f ) {
     if ( scrolledX < 0.2f && scrolledY < 0.2f ) {
         // nope, no need to update anymore
         CCLOG( @"no scrolling" );
@@ -157,6 +161,12 @@
 #pragma mark - Touch handling
 
 - (BOOL)ccTouchBegan:(UITouch *)touch withEvent:(UIEvent *)event {
+    // if we have no node then we don't do anything
+    if ( self.node == nil ) {
+        CCLOG( @"no node has been set, ignoring touch" );
+        return NO;
+    }
+
     // already two touches?
     if ( self.touch1 && self.touch2 ) {
         // we don't care about more touches than two
@@ -259,17 +269,29 @@
         
         // short and close enough for a tap? we check the distance in our coordinate system and don't care for any scaling,
         // we just want the raw distance on the screen
-        if ( elapsed < self.maxTapTime && ccpDistance( pos, self.touch1StartPos ) < self.maxTapDistance ) {
-            CCLOG( @"tap" );
-            if ( self.delegate && [self.delegate respondsToSelector:@selector(node:tappedAt:)] ) {
-                // final position in the node we scroll
-                CGPoint nodePos = ccpAdd( ccpNeg( self.scrollOffset ), pos );
+        if ( ccpDistance( pos, self.touch1StartPos ) < self.maxTapDistance ) {
+            // final position in the node we scroll
+            CGPoint nodePos = ccpAdd( ccpNeg( self.scrollOffset ), pos );
 
-                // adjust by scale
-                nodePos = ccpMult( nodePos, 1 / self.node.scale );
+            // adjust by scale
+            nodePos = ccpMult( nodePos, 1 / self.node.scale );
 
-                // inform the delegate
-                [self.delegate node:self.node tappedAt:nodePos];
+            // short enough for a tap?
+            if ( elapsed < self.maxTapTime ) {
+                CCLOG( @"tap" );
+                if ( self.delegate && [self.delegate respondsToSelector:@selector(node:tappedAt:)] ) {
+                    // inform the delegate
+                    [self.delegate node:self.node tappedAt:nodePos];
+                }
+            }
+
+            // long enough for a long press?
+            else if ( elapsed >= self.maxLongPressime ) {
+                CCLOG( @"long press" );
+                if ( self.delegate && [self.delegate respondsToSelector:@selector(node:longPressesAt:)] ) {
+                    // inform the delegate
+                    [self.delegate node:self.node longPressesAt:nodePos];
+                }
             }
         }
         else {

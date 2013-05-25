@@ -13,6 +13,11 @@
  **/
 - (void) node:(CCNode *)node tappedAt:(CGPoint)pos;
 
+/**
+ * Callback for when the user has long pressed the given node at the given position.
+ **/
+- (void) node:(CCNode *)node longPressesAt:(CGPoint)pos;
+
 @end
 
 
@@ -21,6 +26,7 @@
  * this node initialize it and set the node property to a CCNode that should
  * be pannable and zoomable.
  **/
+//@interface PanZoomNode : CCNode <CCTouchOneByOneDelegate>
 @interface PanZoomNode : CCNode <CCTargetedTouchDelegate>
 
 // the node that is panned and zoomed
@@ -41,6 +47,9 @@
 
 // maximum duration for a touch to still be considered a tap. Default 0.2s
 @property (nonatomic, assign) NSTimeInterval maxTapTime;
+
+// maximum duration for a touch to still be considered a long press. Default 1.0s
+@property (nonatomic, assign) NSTimeInterval maxLongPressime;
 
 // optional delegate
 @property (nonatomic, assign) id<PanZoomNodeDelegate> delegate;
