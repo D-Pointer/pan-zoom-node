@@ -80,8 +80,25 @@
 }
 
 
+- (CGRect) visibleRect {
+    // no node yet?
+    if ( ! self.node ) {
+        return CGRectNull;
+    }
+
+    CGPoint pos = ccpMult( ccpNeg( self.scrollOffset ), 1 / self.node.scale );
+
+    CGFloat width = self.boundingBox.size.width * ( 1 / self.node.scale );
+    CGFloat height = self.boundingBox.size.height * ( 1 / self.node.scale );
+
+    return CGRectMake( pos.x, pos.y, width, height );
+}
+
+
 - (void) centerOn:(CGPoint)pos {
     NSAssert( self.node, @"no node set" );
+
+    CCLOG( @"centering on: %.1f, %.1f", pos.x, pos.y );
 
     // first convert the point to match the node's scale
     CGPoint scaledPos = ccpMult( pos, self.node.scale );
@@ -90,15 +107,15 @@
     float height = self.boundingBox.size.height;
 
     // new scroll offsets for the node
-    float scrollX = width / 2- scaledPos.x;
+    float scrollX = width / 2 - scaledPos.x;
     float scrollY = height / 2 - scaledPos.y;
 
     // peform the panning
     [self panTo:scrollX y:scrollY];
 }
 
+
 - (void) resetTouches {
-    CCLOG( @"in" );
     self.touch1 = nil;
     self.touch2 = nil;
     self.timestamp = 0;
@@ -238,22 +255,18 @@
         CGFloat scale = 1.0f - (self.lastScale - newScale );
         scale = self.node.scale * scale;
 
-        CCLOG( @"pinch distance: %.0f, scale %.2f", newDistance, scale );
+        //CCLOG( @"pinch distance: %.0f, scale %.2f", newDistance, scale );
+
+        // get the current centerpoint of the visible area. this is where we want to center the node after the scale
+        CGRect rect = self.visibleRect;
+        CGPoint center = ccp( rect.origin.x + rect.size.width / 2, rect.origin.y + rect.size.height / 2 );
 
         // keep the scale inside the min and max values
         self.node.scale = clampf( scale, self.minScale, self.maxScale );
         self.lastScale = newScale;
 
-        float nodeWidth = self.node.boundingBox.size.width;
-        float nodeHeight = self.node.boundingBox.size.height;
-
-        // keep the scrolling offset within limits
-        float x = MIN( MAX( self.boundingBox.size.width - nodeWidth, self.scrollOffset.x ), 0 );
-        float y = MIN( MAX( self.boundingBox.size.height - nodeHeight, self.scrollOffset.y ), 0 );
-
-        // position the node
-        self.scrollOffset = ccp( x, y );
-        self.node.position = self.scrollOffset;
+        // perform the centering
+        [self centerOn:center];
     }
 }
 
@@ -263,7 +276,7 @@
     if ( self.touch1 != nil && self.touch2 == nil ) {
         // one touch only, so this was a tap or a pan
         NSTimeInterval elapsed = event.timestamp - self.timestamp;
-        CCLOG( @"single touch ended, elapsed time: %.2f", elapsed );
+        //CCLOG( @"single touch ended, elapsed time: %.2f", elapsed );
 
         CGPoint pos = [[CCDirector sharedDirector] convertToGL:[touch locationInView:[[CCDirector sharedDirector] view]]];
         

@@ -38,6 +38,9 @@
 // maximum scale for the node. If both the min and max scales are 1.0f then pinch zooming is disabled. The default is 1.0f
 @property (nonatomic, assign) float maxScale;
 
+// contains the currently visible rect of the node. Gives CGectNull until a node has been set
+@property (nonatomic, readonly) CGRect visibleRect;
+
 // friction value for the kinetic scrolling after panning. Applied to the scrolling velocity each tick to reduce the panning
 // speed. Sane values are 0 <= friction < 1.0. Default: 0.8
 @property (nonatomic, assign) float friction;
