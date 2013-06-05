@@ -32,6 +32,10 @@
 // the node that is panned and zoomed
 @property (nonatomic, strong) CCNode * node;
 
+// the priority of the touch handler. Use this if this node conflicts with your other touch handlers such as menus etc.
+// Default: 0
+@property (nonatomic, assign) int touchPriority;
+
 // minimum scale for the node. The default is 1.0f
 @property (nonatomic, assign) float minScale;
 
@@ -58,7 +62,7 @@
 @property (nonatomic, assign) id<PanZoomNodeDelegate> delegate;
 
 /**
- * Centers the view on the given pos. Takes scaling into account. If the point is too close to an edge for it to
+ * Centers the view on the given pos in the node's coordinate system. Takes scaling into account. If the point is too close to an edge for it to
  * be exactly in the center the node is panned as much as possible.
  **/
 - (void) centerOn:(CGPoint)pos;

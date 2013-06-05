@@ -34,7 +34,8 @@
 
         // assume we cover the entire screen
         self.contentSize = [[CCDirector sharedDirector] winSize];
-        
+
+        //
         // sane default scales
         self.minScale = 1.0f;
         self.maxScale = 1.0f;
@@ -44,6 +45,9 @@
         self.maxTapDistance = 20;
         self.maxTapTime = 0.2;
         self.maxLongPressime = 1.0;
+
+        // default touch priority
+        self.touchPriority = 0;
         
         [self resetTouches];
     }
@@ -53,7 +57,7 @@
 
 
 - (void)onEnter {
-    [[[CCDirector sharedDirector] touchDispatcher] addTargetedDelegate:self priority:0 swallowsTouches:YES];
+    [[[CCDirector sharedDirector] touchDispatcher] addTargetedDelegate:self priority:self.touchPriority swallowsTouches:YES];
     [super onEnter];
 }
 
