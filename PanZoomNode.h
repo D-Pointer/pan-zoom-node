@@ -56,7 +56,7 @@
 @property (nonatomic, assign) NSTimeInterval maxTapTime;
 
 // maximum duration for a touch to still be considered a long press. Default 1.0s
-@property (nonatomic, assign) NSTimeInterval maxLongPressime;
+@property (nonatomic, assign) NSTimeInterval maxLongPressTime;
 
 // optional delegate
 @property (nonatomic, assign) id<PanZoomNodeDelegate> delegate;

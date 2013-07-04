@@ -303,7 +303,7 @@
             }
 
             // long enough for a long press?
-            else if ( elapsed >= self.maxLongPressime ) {
+            else if ( elapsed >= self.maxLongPressTime ) {
                 CCLOG( @"long press" );
                 if ( self.delegate && [self.delegate respondsToSelector:@selector(node:longPressesAt:)] ) {
                     // inform the delegate
