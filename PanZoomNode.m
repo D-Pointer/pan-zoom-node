@@ -44,7 +44,7 @@
         // max time and distance for a tap to be a tap and not a pan
         self.maxTapDistance = 20;
         self.maxTapTime = 0.2;
-        self.maxLongPressime = 1.0;
+        self.maxLongPressTime = 1.0;
 
         // default touch priority
         self.touchPriority = 0;
@@ -102,7 +102,7 @@
 - (void) centerOn:(CGPoint)pos {
     NSAssert( self.node, @"no node set" );
 
-    CCLOG( @"centering on: %.1f, %.1f", pos.x, pos.y );
+    //CCLOG( @"centering on: %.1f, %.1f", pos.x, pos.y );
 
     // first convert the point to match the node's scale
     CGPoint scaledPos = ccpMult( pos, self.node.scale );
@@ -139,6 +139,11 @@
     // position the node
     self.scrollOffset = ccp( x, y );
     self.node.position = self.scrollOffset;
+
+    if ( self.delegate && [self.delegate respondsToSelector:@selector(pannedNode:)] ) {
+        // inform the delegate
+        [self.delegate pannedNode:self.node];
+    }
 }
 
 
@@ -146,12 +151,12 @@
     // scale the speed with friction
     self.velocity = ccpMult( self.velocity, self.friction );
 
-    CCLOG( @"velocity: %.0f, %.0f, friction: %.2f", self.velocity.x, self.velocity.y, self.friction );
+    //CCLOG( @"velocity: %.0f, %.0f, friction: %.2f", self.velocity.x, self.velocity.y, self.friction );
 
     // when the speed is slow enough we stop
     if ( fabsf( self.velocity.x ) < 1 && fabsf( self.velocity.y ) < 1 ) {
         // stop panning
-        CCLOG( @"velocity done" );
+        //CCLOG( @"velocity done" );
         [self unscheduleUpdate];
         return;
     }
@@ -168,11 +173,11 @@
     // did we actually scroll anywhere?
     float scrolledX = fabsf( lastScrollOffset.x - self.scrollOffset.x );
     float scrolledY = fabsf( lastScrollOffset.y - self.scrollOffset.y );
-    CCLOG( @"scrolled: %.2f, %.2f", scrolledX, scrolledY );
+    //CCLOG( @"scrolled: %.2f, %.2f", scrolledX, scrolledY );
 
     if ( scrolledX < 0.2f && scrolledY < 0.2f ) {
         // nope, no need to update anymore
-        CCLOG( @"no scrolling" );
+        //CCLOG( @"no scrolling" );
         [self unscheduleUpdate];
     }
 }
@@ -191,18 +196,25 @@
     // already two touches?
     if ( self.touch1 && self.touch2 ) {
         // we don't care about more touches than two
-        CCLOG( @"already two touches, ignoring extra touches" );
+        //CCLOG( @"already two touches, ignoring extra touches" );
         return NO;
     }
     
     for ( UITouch * tmpTouch in event.allTouches ) {
-        CGPoint pos = [[CCDirector sharedDirector] convertToGL:[touch locationInView:[[CCDirector sharedDirector] view]]];
+        CGPoint pos = [[CCDirector sharedDirector] convertToGL:[tmpTouch locationInView:[[CCDirector sharedDirector] view]]];
 
-        CCLOG( @"pos: %.0f, %.0f", pos.x, pos.y );
-        
+        //CCLOG( @"pos: %.0f, %.0f", pos.x, pos.y );
+
+        // first touch already taken? when we pinch we will get all the old touches too in allTouches, so we need
+        // to avoid using the same touche for 1 and 2
+        if ( self.touch1 == tmpTouch ) {
+            // this is already the first touch, we're done with it
+            //CCLOG( @"same first touch" );
+        }
+
         // first touch free?
-        if ( self.touch1 == nil ) {
-            CCLOG( @"got touch 1" );
+        else if ( self.touch1 == nil ) {
+            //CCLOG( @"got touch 1" );
             self.touch1 = tmpTouch;
             self.timestamp = tmpTouch.timestamp;
             self.lastTimestamp = tmpTouch.timestamp;
@@ -211,13 +223,15 @@
             self.touch1StartPos = pos;
         }
         else if ( self.touch2 == nil ) {
+            //CCLOG( @"got touch 2" );
             self.touch2 = tmpTouch;
 
-            // now we're pinching, save the starting distance between the touches
-            self.startPinchDistance = ccpDistance([[CCDirector sharedDirector] convertToGL:[self.touch1 locationInView:[[CCDirector sharedDirector] view]]],
-                                                  [[CCDirector sharedDirector] convertToGL:[self.touch2 locationInView:[[CCDirector sharedDirector] view]]] );
+            CGPoint touch1Pos = [[CCDirector sharedDirector] convertToGL:[self.touch1 locationInView:[[CCDirector sharedDirector] view]]];
 
-            CCLOG( @"start pinch, distance: %.0f", self.startPinchDistance );
+            // now we're pinching, save the starting distance between the touches
+            self.startPinchDistance = ccpDistance( touch1Pos, pos );
+
+            //CCLOG( @"start pinch, distance: %.0f", self.startPinchDistance );
             self.lastScale = 1.0f;
         }
     }
@@ -238,7 +252,7 @@
 
         // delta position
         CGPoint delta = ccpSub( newPos, oldPos );
-        CCLOG( @"pan delta: %.0f, %.0f", delta.x, delta.y );
+        //CCLOG( @"pan delta: %.0f, %.0f", delta.x, delta.y );
 
         float x = self.scrollOffset.x + delta.x;
         float y = self.scrollOffset.y + delta.y;
@@ -259,6 +273,13 @@
         CGFloat scale = 1.0f - (self.lastScale - newScale );
         scale = self.node.scale * scale;
 
+        // check for NaN or infinity. this is really a bug in the touch handling and should probably be asserted out of here?
+        if ( isnan( scale ) || isinf( scale ) ) {
+            // oops
+            CCLOG( @"isnan or isinf...");
+            return;
+        }
+        
         //CCLOG( @"pinch distance: %.0f, scale %.2f", newDistance, scale );
 
         // get the current centerpoint of the visible area. this is where we want to center the node after the scale
@@ -271,6 +292,11 @@
 
         // perform the centering
         [self centerOn:center];
+
+        if ( self.delegate && [self.delegate respondsToSelector:@selector(node:scaledTo:)] ) {
+            // inform the delegate
+            [self.delegate node:self.node scaledTo:self.node.scale];
+        }
     }
 }
 
@@ -312,18 +338,16 @@
             }
         }
         else {
-            // pan ended,
+            // pan ended
 
             // the time it took to move that velocity distance
             NSTimeInterval time = touch.timestamp - self.lastTimestamp;
-
-            CCLOG( @"pan ended, time: %.3f", time );
             
             // calculate a velocity
             CGPoint oldPos = [[CCDirector sharedDirector] convertToGL:[touch previousLocationInView:[[CCDirector sharedDirector] view]]];
             self.velocity = ccpMult( ccpSub( pos, oldPos ), sqrtf( 1 / time ) );
 
-            CCLOG( @"pan ended, velocity: %.0f, %.0f", self.velocity.x, self.velocity.y );
+            //CCLOG( @"pan ended, time: %.3f, velocity: %.0f, %.0f", time, self.velocity.x, self.velocity.y );
 
             // unschedule any previous update() and reschedule a new
             [self unscheduleUpdate];

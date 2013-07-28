@@ -18,6 +18,10 @@
  **/
 - (void) node:(CCNode *)node longPressesAt:(CGPoint)pos;
 
+- (void) pannedNode:(CCNode *)node;
+
+- (void) node:(CCNode *)node scaledTo:(CGFloat)scale;
+
 @end
 
 
