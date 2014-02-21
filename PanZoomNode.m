@@ -13,11 +13,13 @@
 
 @property (nonatomic, assign) float          startPinchDistance;
 
-@property (nonatomic, assign) float          lastScale;
-@property (nonatomic, assign) CGPoint        scrollOffset;
+@property (nonatomic, assign) float              lastScale;
+@property (nonatomic, readwrite, assign) CGPoint panOffset;
 
 // inertia speed in points per second for when a panning ends
-@property (nonatomic, assign) CGPoint        velocity;
+@property (nonatomic, assign) CGPoint            velocity;
+
+@property (nonatomic, assign) BOOL               dragging;
 
 @end
 
@@ -30,12 +32,14 @@
         self.delegate = nil;
 
         // no scrolling offset yet
-        self.scrollOffset = ccp( 0, 0 );
+        self.panOffset = ccp( 0, 0 );
 
         // assume we cover the entire screen
         self.contentSize = [[CCDirector sharedDirector] winSize];
 
-        //
+        // not dragging
+        self.dragging = NO;
+
         // sane default scales
         self.minScale = 1.0f;
         self.maxScale = 1.0f;
@@ -90,7 +94,7 @@
         return CGRectNull;
     }
 
-    CGPoint pos = ccpMult( ccpNeg( self.scrollOffset ), 1 / self.node.scale );
+    CGPoint pos = ccpMult( ccpNeg( self.panOffset ), 1 / self.node.scale );
 
     CGFloat width = self.boundingBox.size.width * ( 1 / self.node.scale );
     CGFloat height = self.boundingBox.size.height * ( 1 / self.node.scale );
@@ -123,6 +127,7 @@
     self.touch1 = nil;
     self.touch2 = nil;
     self.timestamp = 0;
+    self.dragging = NO;
 }
 
 
@@ -137,8 +142,8 @@
     y = MIN( MAX( self.boundingBox.size.height - nodeHeight, y ), 0 );
 
     // position the node
-    self.scrollOffset = ccp( x, y );
-    self.node.position = self.scrollOffset;
+    self.panOffset = ccp( x, y );
+    self.node.position = self.panOffset;
 
     if ( self.delegate && [self.delegate respondsToSelector:@selector(pannedNode:)] ) {
         // inform the delegate
@@ -162,17 +167,17 @@
     }
 
     // where should we pan
-    float x = self.scrollOffset.x + self.velocity.x * delta;
-    float y = self.scrollOffset.y + self.velocity.y * delta;
+    float x = self.panOffset.x + self.velocity.x * delta;
+    float y = self.panOffset.y + self.velocity.y * delta;
 
-    CGPoint lastScrollOffset = self.scrollOffset;
+    CGPoint lastpanOffset = self.panOffset;
 
     // perform the panning
     [self panTo:x y:y];
 
     // did we actually scroll anywhere?
-    float scrolledX = fabsf( lastScrollOffset.x - self.scrollOffset.x );
-    float scrolledY = fabsf( lastScrollOffset.y - self.scrollOffset.y );
+    float scrolledX = fabsf( lastpanOffset.x - self.panOffset.x );
+    float scrolledY = fabsf( lastpanOffset.y - self.panOffset.y );
     //CCLOG( @"scrolled: %.2f, %.2f", scrolledX, scrolledY );
 
     if ( scrolledX < 0.2f && scrolledY < 0.2f ) {
@@ -199,14 +204,20 @@
         //CCLOG( @"already two touches, ignoring extra touches" );
         return NO;
     }
-    
+
+    // are we dragging?
+    if ( self.dragging ) {
+        CCLOG( @"dragging, ignoring new touch" );
+        return NO;
+    }
+
+    CCLOG( @"touch count: %d", event.allTouches.count );
+
     for ( UITouch * tmpTouch in event.allTouches ) {
         CGPoint pos = [[CCDirector sharedDirector] convertToGL:[tmpTouch locationInView:[[CCDirector sharedDirector] view]]];
 
-        //CCLOG( @"pos: %.0f, %.0f", pos.x, pos.y );
-
         // first touch already taken? when we pinch we will get all the old touches too in allTouches, so we need
-        // to avoid using the same touche for 1 and 2
+        // to avoid using the same touch for 1 and 2
         if ( self.touch1 == tmpTouch ) {
             // this is already the first touch, we're done with it
             //CCLOG( @"same first touch" );
@@ -221,6 +232,22 @@
             
             // save the starting position
             self.touch1StartPos = pos;
+
+            // if we only have one touch then we may be starting a drag
+            if ( event.allTouches.count == 1 ) {
+                CCLOG( @"possible drag start" );
+                if ( self.delegate && [self.delegate respondsToSelector:@selector(shouldStartDragForNode:atPos:)] ) {
+                    // pressed pos
+                    CGPoint pressedPos = ccpAdd( ccpNeg( self.panOffset ), pos );
+
+                    // adjust by scale
+                    pressedPos = ccpMult( pressedPos, 1 / self.node.scale );
+                    self.dragging = [self.delegate shouldStartDragForNode:self.node atPos:pressedPos];
+                }
+                else {
+                    self.dragging = NO;
+                }
+            }
         }
         else if ( self.touch2 == nil ) {
             //CCLOG( @"got touch 2" );
@@ -250,14 +277,34 @@
         CGPoint newPos = [[CCDirector sharedDirector] convertToGL:[touch locationInView:[[CCDirector sharedDirector] view]]];
         CGPoint oldPos = [[CCDirector sharedDirector] convertToGL:[touch previousLocationInView:[[CCDirector sharedDirector] view]]];
 
-        // delta position
-        CGPoint delta = ccpSub( newPos, oldPos );
-        //CCLOG( @"pan delta: %.0f, %.0f", delta.x, delta.y );
+        // are we dragging?
+        if ( self.dragging ) {
+            CCLOG( @"dragging: %.0f, %.0f", newPos.x, newPos.y );
+            if ( self.delegate && [self.delegate respondsToSelector:@selector(node:draggedTo:)] ) {
+                // pressed pos
+                CGPoint pressedPos = ccpAdd( ccpNeg( self.panOffset ), newPos );
 
-        float x = self.scrollOffset.x + delta.x;
-        float y = self.scrollOffset.y + delta.y;
+                // adjust by scale
+                pressedPos = ccpMult( pressedPos, 1 / self.node.scale );
 
-        [self panTo:x y:y];
+                // call the delegate
+                self.dragging = [self.delegate node:self.node draggedTo:pressedPos];
+            }
+            else {
+                self.dragging = NO;
+            }
+        }
+        else {
+            // no drag, do a normal pan
+            // get the delta position
+            CGPoint delta = ccpSub( newPos, oldPos );
+            //CCLOG( @"pan delta: %.0f, %.0f", delta.x, delta.y );
+
+            float x = self.panOffset.x + delta.x;
+            float y = self.panOffset.y + delta.y;
+
+            [self panTo:x y:y];
+        }
 
         // update the timestamp
         self.lastTimestamp = touch.timestamp;
@@ -304,55 +351,68 @@
 - (void) ccTouchEnded:(UITouch *)touch withEvent:(UIEvent *)event {
     // only one touch?
     if ( self.touch1 != nil && self.touch2 == nil ) {
-        // one touch only, so this was a tap or a pan
-        NSTimeInterval elapsed = event.timestamp - self.timestamp;
-        //CCLOG( @"single touch ended, elapsed time: %.2f", elapsed );
-
-        CGPoint pos = [[CCDirector sharedDirector] convertToGL:[touch locationInView:[[CCDirector sharedDirector] view]]];
-        
-        // short and close enough for a tap? we check the distance in our coordinate system and don't care for any scaling,
-        // we just want the raw distance on the screen
-        if ( ccpDistance( pos, self.touch1StartPos ) < self.maxTapDistance ) {
-            // final position in the node we scroll
-            CGPoint nodePos = ccpAdd( ccpNeg( self.scrollOffset ), pos );
-
-            // adjust by scale
-            nodePos = ccpMult( nodePos, 1 / self.node.scale );
-
-            // short enough for a tap?
-            if ( elapsed < self.maxTapTime ) {
-                CCLOG( @"tap" );
-                if ( self.delegate && [self.delegate respondsToSelector:@selector(node:tappedAt:)] ) {
-                    // inform the delegate
-                    [self.delegate node:self.node tappedAt:nodePos];
-                }
+        // one touch only, so this was a tap, drag or a pan
+        if ( self.dragging ) {
+            CCLOG( @"dragging ended" );
+            if ( self.delegate && [self.delegate respondsToSelector:@selector(dragEndedForNode:)] ) {
+                [self.delegate dragEndedForNode:self.node];
             }
 
-            // long enough for a long press?
-            else if ( elapsed >= self.maxLongPressTime ) {
-                CCLOG( @"long press" );
-                if ( self.delegate && [self.delegate respondsToSelector:@selector(node:longPressesAt:)] ) {
-                    // inform the delegate
-                    [self.delegate node:self.node longPressesAt:nodePos];
+            self.dragging = NO;
+        }
+
+        // NOTE: this else is commented out so that short drags (in time) are still considered as taps
+        //else {
+            // a tap or a pan
+            NSTimeInterval elapsed = event.timestamp - self.timestamp;
+            //CCLOG( @"single touch ended, elapsed time: %.2f", elapsed );
+
+            CGPoint pos = [[CCDirector sharedDirector] convertToGL:[touch locationInView:[[CCDirector sharedDirector] view]]];
+
+            // short and close enough for a tap? we check the distance in our coordinate system and don't care for any scaling,
+            // we just want the raw distance on the screen
+            if ( ccpDistance( pos, self.touch1StartPos ) < self.maxTapDistance ) {
+                // final position in the node we scroll
+                CGPoint nodePos = ccpAdd( ccpNeg( self.panOffset ), pos );
+
+                // adjust by scale
+                nodePos = ccpMult( nodePos, 1 / self.node.scale );
+
+                // short enough for a tap?
+                if ( elapsed < self.maxTapTime ) {
+                    CCLOG( @"tap" );
+                    if ( self.delegate && [self.delegate respondsToSelector:@selector(node:tappedAt:)] ) {
+                        // inform the delegate
+                        [self.delegate node:self.node tappedAt:nodePos];
+                    }
+                }
+
+                // long enough for a long press?
+                else if ( elapsed >= self.maxLongPressTime ) {
+                    CCLOG( @"long press" );
+                    if ( self.delegate && [self.delegate respondsToSelector:@selector(node:longPressesAt:)] ) {
+                        // inform the delegate
+                        [self.delegate node:self.node longPressesAt:nodePos];
+                    }
                 }
             }
-        }
-        else {
-            // pan ended
+            else {
+                // pan ended
 
-            // the time it took to move that velocity distance
-            NSTimeInterval time = touch.timestamp - self.lastTimestamp;
-            
-            // calculate a velocity
-            CGPoint oldPos = [[CCDirector sharedDirector] convertToGL:[touch previousLocationInView:[[CCDirector sharedDirector] view]]];
-            self.velocity = ccpMult( ccpSub( pos, oldPos ), sqrtf( 1 / time ) );
+                // the time it took to move that velocity distance
+                NSTimeInterval time = touch.timestamp - self.lastTimestamp;
 
-            //CCLOG( @"pan ended, time: %.3f, velocity: %.0f, %.0f", time, self.velocity.x, self.velocity.y );
+                // calculate a velocity
+                CGPoint oldPos = [[CCDirector sharedDirector] convertToGL:[touch previousLocationInView:[[CCDirector sharedDirector] view]]];
+                self.velocity = ccpMult( ccpSub( pos, oldPos ), sqrtf( 1 / time ) );
 
-            // unschedule any previous update() and reschedule a new
-            [self unscheduleUpdate];
-            [self scheduleUpdate];
-        }
+                //CCLOG( @"pan ended, time: %.3f, velocity: %.0f, %.0f", time, self.velocity.x, self.velocity.y );
+                
+                // unschedule any previous update() and reschedule a new
+                [self unscheduleUpdate];
+                [self scheduleUpdate];
+            }
+        //}
     }
 
     [self resetTouches];

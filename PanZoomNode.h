@@ -22,6 +22,15 @@
 
 - (void) node:(CCNode *)node scaledTo:(CGFloat)scale;
 
+/**
+ * Drag handling.
+ **/
+- (BOOL) shouldStartDragForNode:(CCNode *)node atPos:(CGPoint)pos;
+
+- (BOOL) node:(CCNode *)node draggedTo:(CGPoint)pos;
+
+- (void) dragEndedForNode:(CCNode *)node;
+
 @end
 
 
@@ -30,8 +39,8 @@
  * this node initialize it and set the node property to a CCNode that should
  * be pannable and zoomable.
  **/
-//@interface PanZoomNode : CCNode <CCTouchOneByOneDelegate>
-@interface PanZoomNode : CCNode <CCTargetedTouchDelegate>
+@interface PanZoomNode : CCNode <CCTouchOneByOneDelegate>
+//@interface PanZoomNode : CCNode <CCTargetedTouchDelegate>
 
 // the node that is panned and zoomed
 @property (nonatomic, strong) CCNode * node;
@@ -48,6 +57,9 @@
 
 // contains the currently visible rect of the node. Gives CGectNull until a node has been set
 @property (nonatomic, readonly) CGRect visibleRect;
+
+// the amount that the node has been panned
+@property (nonatomic, readonly) CGPoint panOffset;
 
 // friction value for the kinetic scrolling after panning. Applied to the scrolling velocity each tick to reduce the panning
 // speed. Sane values are 0 <= friction < 1.0. Default: 0.8
